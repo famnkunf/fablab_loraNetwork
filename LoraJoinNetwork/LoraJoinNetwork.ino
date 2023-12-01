@@ -17,15 +17,19 @@ int txPin = 21;
 
 int lastsend = 0;  //Last send time
 int lastjoin = 0;  //Last join time
+int t_loop = 0; // Time a loop takes
 bool cnt = false;
 bool cnt2 = false;
 char out[200];
 char test[200];
 int infrared = 0;
+int old_infrared;
 int co2, tvoc;
+int old_co2, old_tvoc;
 char temp[200];
 char hum[200];
 int t, h;
+int old_t, old_h;
 char t_c[20];
 char h_c[20];
 
@@ -33,7 +37,7 @@ char data[200];
 bool con;
 bool avaiableForSend = true;
 
-char event_tx_done[] = {'T','X','_','D','O','N','E','\0'};
+char event_tx_done[] = { 'T', 'X', '_', 'D', 'O', 'N', 'E', '\0' };
 
 const char* band = "8";
 const char* appkey = "AC1F09FFFE0AE30FAC1F09FFF8683172";
@@ -96,6 +100,7 @@ void setup() {
 }
 
 void loop() {
+  t_loop = millis();
   while (1) {
     // Check the networks is joined, if not then try to rejoin.
     if (millis() - lastjoin >= 15000) {
@@ -129,7 +134,8 @@ void loop() {
       if (cnt == false) {
         Serial.println("Rejoinning...");
         mySerial1.write("AT+JOIN\r\n");
-        while (mySerial1.available() == 0);
+        while (mySerial1.available() == 0)
+          ;
         while (mySerial1.available()) {
           Serial.write(mySerial1.read());
         }
@@ -139,20 +145,20 @@ void loop() {
       break;
     }
   }
-  // Send after 3s
-  if (millis() - lastsend >= 200) {
+  // Send after 1s
+  if (millis() - lastsend >= 1000) {
     Serial.println("Getting Data from Sensor");
     mySerial1.write("ATC+TEMP=?\r\n");
-    while(mySerial1.available() == 0);
-    while (true){
-      if (mySerial1.available()){
+    while (mySerial1.available() == 0);
+    while (true) {
+      if (mySerial1.available()) {
         char a = mySerial1.read();
-        if (a >'0' && a<='9'){
+        if (a > '0' && a <= '9') {
           t_c[0] = a;
-          for(int i=1; true; i++){
+          for (int i = 1; true; i++) {
             t_c[i] = mySerial1.read();
-            if (t_c[i] == '.'){
-              t_c[i] ='\0';
+            if (t_c[i] == '.') {
+              t_c[i] = '\0';
               break;
             }
           }
@@ -160,21 +166,22 @@ void loop() {
         }
       }
     }
-    while(mySerial1.available()){
+    while (mySerial1.available()) {
       mySerial1.read();
     }
     t = combineToInt(t_c);
     mySerial1.write("ATC+HUM=?\r\n");
-    while(mySerial1.available() == 0);
-    while (true){
-      if (mySerial1.available()){
+    while (mySerial1.available() == 0)
+      ;
+    while (true) {
+      if (mySerial1.available()) {
         char a = mySerial1.read();
-        if (a >'0' && a<='9'){
+        if (a > '0' && a <= '9') {
           h_c[0] = a;
-          for(int i=1; true; i++){
+          for (int i = 1; true; i++) {
             h_c[i] = mySerial1.read();
-            if (h_c[i] == '\n' || h_c[i] == '\r'){
-              h_c[i] ='\0';
+            if (h_c[i] == '\n' || h_c[i] == '\r') {
+              h_c[i] = '\0';
               break;
             }
           }
@@ -182,7 +189,7 @@ void loop() {
         }
       }
     }
-    while(mySerial1.available()){
+    while (mySerial1.available()) {
       mySerial1.read();
     }
     h = combineToInt(h_c);
@@ -196,18 +203,37 @@ void loop() {
     } else {
       infrared = 0;
     }
-    Serial.print("Temperature: ");Serial.println(t);
-    Serial.print("Humidity: ");Serial.println(h);
-    Serial.print("Co2: ");Serial.println(co2);
-    Serial.print("tvoc: ");Serial.println(tvoc);
-    Serial.print("Infrared: ");Serial.println(infrared);
-    send(1, co2);
-    send(2, tvoc);
-    send(3, infrared);
-    send(4, t);
-    send(5,h);
+    Serial.print("Temperature: ");
+    Serial.println(t);
+    Serial.print("Humidity: ");
+    Serial.println(h);
+    Serial.print("Co2: ");
+    Serial.println(co2);
+    Serial.print("tvoc: ");
+    Serial.println(tvoc);
+    Serial.print("Infrared: ");
+    Serial.println(infrared);
+    if (old_co2 != co2) {
+      send(1, co2);
+    }
+    if (old_tvoc != tvoc) {
+      send(2, tvoc);
+    }
+    if (old_infrared != infrared) {
+      send(3, infrared);
+    }
+    if (old_t != t) {
+      send(4, t);
+    }
+    if (old_h != h) {
+      send(5, h);
+    }
 
     lastsend = millis();
+    Serial.print("\nA loop takes: ");
+    Serial.print((millis() - t_loop)/1000);
+    Serial.println("s");
+    t_loop = millis();
   }
 
 
@@ -220,6 +246,7 @@ void loop() {
     mySerial1.write(Serial.read());
   }
   //---------------------                 ---------------------
+  
 }
 
 // Compare 2 array
@@ -270,7 +297,7 @@ char* convertToHex(int num) {
     hexString[i] = hexString[digitIndex - i - 1];
     hexString[digitIndex - i - 1] = temp;
   }
-  
+
 
   hexString[digitIndex] = '\0';  // Terminate the string with a null character
   return hexString;
@@ -290,29 +317,28 @@ void send(int port, int data) {
       Serial.write(o);
       if (o != event_tx_done[i]) {
         i = 0;
-      }else{
+      } else {
         i++;
       }
-      if(i == 7){
+      if (i == 7) {
         break;
       }
     }
   }
 }
-int combineToInt(char* c){
+int combineToInt(char* c) {
   int s = 0;
   int size = 0;
-  for (int i = 0; c[i]!='\0'; i++){
+  for (int i = 0; c[i] != '\0'; i++) {
     size += 1;
   }
-  for (int i = 0; i<size; i++){
-    s += (c[i]-'0')*pow(10, (size-i-1));
+  for (int i = 0; i < size; i++) {
+    s += (c[i] - '0') * pow(10, (size - i - 1));
   }
   return s;
 }
 
 double calculateAbsoluteHumidity(double relativeHumidity, double temperature) {
   double saturationVaporPressure = 610.78 * exp((17.275 * temperature) / (temperature + 237.3));
-  return (relativeHumidity * saturationVaporPressure*1000) / (461.5 * temperature * 100.0);
+  return (relativeHumidity * saturationVaporPressure * 1000) / (461.5 * temperature * 100.0);
 }
-
